@@ -28,7 +28,7 @@ def grab_from_list(dirname: str, links: list, proxy=None):
         f.write(r.content)
         f.close()
 
-f = open('boss.txt', 'r')
+f = open('links.txt', 'r')
 res = f.readlines()
 res = [x[:-1] for x in res]
 proxy = {'http': 'http://127.0.0.1:8080',
