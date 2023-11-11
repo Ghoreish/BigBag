@@ -58,7 +58,7 @@ proxy = {'http': 'http://127.0.0.1:8080',
 l = extract_links('{example link}', '{example host}', proxy=proxy)
 
 
-f = open('boss.txt', 'w')
+f = open('links.txt', 'w')
 for i in l:
     try:
         f.write(i)
