@@ -4,18 +4,30 @@ import requests
 
 def getlinks(text):
     links = re.findall('[\'\">](http[s]?://[^\'\"<>\n]+)', text)
-    return links
+    final_links = []
+    for i in links:
+        temp_link = i.split("//", 1)
+        while "//" in temp_link[1]:
+            temp_link[1] = temp_link[1].replace("//", "/")
+        final_links.append(temp_link[0] + temp_link[1])
+    return final_links
 
 
 def getpaths(text):
-    paths = re.findall('[\'\"]([./]*[/][-a-zA-Z0-9()!@:%_+.~#?&=]+[-a-zA-Z0-9()!@:%_+.~#?&/=]+)[\'\"]', text)
-    if '//' in paths:
-        print(text)
-    return paths
+    paths = re.findall('([./]*[/][-a-zA-Z0-9()!@:%_+.~#?&=]+[-a-zA-Z0-9()!@:%_+.~#?&/=]+)', text)
+    final_paths = []
+    for i in paths:
+        temp_path = i
+        if i[:2] == "//":
+            continue
+        while "//" in temp_path:
+            temp_path = temp_path.replace("//", "/")
+        final_paths.append(temp_path)
+    return final_paths
 
 
 def gethost(link):
-    hostname = re.findall('(http[s]?://)?([a-zA-Z0-9.]+[.][a-zA-Z]+)', link)
+    hostname = re.findall('(http[s]?://)?([-a-zA-Z0-9.]+[.][-a-zA-Z]+)', link)
     try:
         return hostname[0][0] + hostname[0][1]
     except:
@@ -24,84 +36,101 @@ def gethost(link):
 
 def check_for_large(url, proxy):
     r = requests.head(url, verify=False, proxies=proxy)
+
     if 'Content-Length' not in r.headers:
         return False
     cl = r.headers['Content-Length']
-    if int(cl) > 2000000:
+    if int(cl) > 100000000:
         return True
     else:
         return False
 
 
-def extract_links(link, allowed_host, filename, checked_links=[], selected_links=[], proxy=None, cookies={}):
-    print(link)
-    if link in checked_links:
-        return None
-    hostname = gethost(link)
-    if allowed_host not in hostname:
-        return None
-    if check_for_large(link, proxy):
-        return None
-    try:
-        r = requests.get(link, allow_redirects=True, proxies=proxy, verify=False, cookies=cookies)
-        res = r.text
-    except Exception as e:
-        print(link)
-        print(e)
-        return None
-    if link in checked_links:
-        return None
-    checked_links.append(link)
-    hostname = gethost(link)
-    if allowed_host not in hostname:
-        return None
-    f = open(filename, 'w')
-    for i in selected_links:
-        try:
-            f.write(i)
-            f.write('\n')
-        except Exception as e:
-            print(e)
-            print(i)
-    f.close()
-    if r.url not in selected_links:
-        selected_links.append(r.url)
-    pure_links = getlinks(res)
-    pure_paths = getpaths(res)
-    links = []
-    for i in pure_links:
-        if i not in checked_links:
-            links.append(i)
-    for i in pure_paths:
-        if i[0] != '/':
-            temp_link = link + '/' + i
+complete_checked_links = set()
+all_links = set()
+temp_links = set()
+error_links = set()
+target_link = input("target: ")
+allowed_host = input("allowed host: ")
+filename = input("filename: ")
+proxy = {"http": "http://127.0.0.1:8080", "https": "http://127.0.0.1:8080"} #burp proxy you can empty this dict for direct crawling
+all_links.add(target_link)
+while len(all_links) != len(complete_checked_links):
+    for i in all_links:
+        f = open(filename, "w")
+        for j in complete_checked_links:
+            f.write(j)
+            f.write("\n")
+        if i not in complete_checked_links and allowed_host in gethost(i):
+            try:
+                if check_for_large(i, proxy=proxy) == True:
+                    print("large link:", i)
+                    complete_checked_links.add(i)
+                    continue
+                r = requests.get(i, proxies=proxy, verify=False)
+                if "<h1>Burp Suite Professional</h1>" in r.text:
+                    error_links.add(i)
+                    continue
+                if gethost(r.url) not in allowed_host:
+                    complete_checked_links.add(i)
+                    continue
+            except:
+                print("error")
+                error_links.add(i)
+                r = None
+            if r != None:
+                res = r.text
+                links = getlinks(res)
+                paths = getpaths(res)
+                for j in links:
+                    if allowed_host in gethost(j) and j not in complete_checked_links:
+                        temp_links.add(j)
+                for j in paths:
+                    if j[:3] == "../":
+                        if r.url[-1] == "/":
+                            jpath = r.url[:-1] + j
+                        else:
+                            jpath = r.url + j
+                    else:
+                        basehost = gethost(r.url)
+                        if basehost[-1] == "/" or j[0] == "/":
+                            jpath = basehost + j
+                        else:
+                            jpath = basehost + "/" + j
+                    if jpath in complete_checked_links:
+                        continue
+                    if allowed_host in gethost(jpath):
+                        temp_links.add(jpath)
+        complete_checked_links.add(i)
+    if len(error_links) != 0:
+        print("!errors!")
+        for j in error_links:
+            print(j)
+        check_errors_again = None
+        while check_errors_again not in ["y", "n"]:
+            check_errors_again = input("check them again? (y/n)")
+        if check_errors_again == "y":
+            for j in error_links:
+                if allowed_host in gethost(j):
+                    temp_links.add(j)
         else:
-            temp_link = hostname + i
-        print(temp_link, 1)
-
-        if temp_link not in checked_links:
-            links.append(temp_link)
-    for i in links:
-        if i not in checked_links:
-            extract_links(i, allowed_host, filename, checked_links, proxy=proxy, cookies=cookies)
-    return selected_links
-
-
-filename = 'example.txt'
-url = 'https://example.com'
-allowed_host = 'https://example.com'
-proxy = {'http': 'http://127.0.0.1:8080',
-         'https': 'http://127.0.0.1:8080'}
-cookie = {}
-l = extract_links(url, allowed_host, filename, proxy=proxy, cookies=cookie)
-
-f = open(filename, 'w')
-for i in l:
-    try:
+            error_links = set()
+            error_links.add(1)
+        if len(error_links) != 0:
+            additional_link_ask = None
+            while additional_link_ask not in ["y", "n"]:
+                additional_link_ask = input("any additional links? (y/n)")
+            if additional_link_ask == "y":
+                add_link = input("link: ")
+                while add_link != "":
+                    temp_links.add(add_link)
+                    add_link = input("link: ")
+        error_links = set()
+    f = open(filename, "w")
+    for i in complete_checked_links:
         f.write(i)
-        f.write('\n')
-    except:
-        print(i)
-f.close()
-for i in l:
-    print(i)
+        f.write("\n")
+    f.close()
+    for i in temp_links:
+        all_links.add(i)
+    temp_links = set()
