@@ -14,7 +14,7 @@ def getlinks(text):
 
 
 def getpaths(text):
-    paths = re.findall('([./]*[/][-a-zA-Z0-9()!@:%_+.~#?&=]+[-a-zA-Z0-9()!@:%_+.~#?&/=]+)', text)
+    paths = re.findall('[\'\"]([./]*[/][-a-zA-Z0-9()!@:%_+.~#?&=]+[-a-zA-Z0-9()!@:%_+.~#?&/=]+)[\'\"]', text)
     final_paths = []
     for i in paths:
         temp_path = i
